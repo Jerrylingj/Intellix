@@ -30,7 +30,7 @@ public class DeepSeekApi {
 
         prompt.append("### 输出格式\\n\\n");
         prompt.append("#### 1. 图表代码部分\\n\\n");
-        prompt.append("- 使用 **Echarts V5**，生成符合高质量标准的 `option` 配置代码。\\n");
+        prompt.append("- 使用 **Echarts V5**，生成符合高质量标准的 `option` **严格按照json格式** 的配置代码。\\n");
         prompt.append("- **必须包含以下内容：**\\n");
         prompt.append("  - 图表标题：位置居中，使用加粗字体，明确反映主题。\\n");
         prompt.append("  - 坐标轴和数据标签：类别轴标签避免重叠，数值轴需标注单位，标签清晰。\\n");
@@ -39,7 +39,7 @@ public class DeepSeekApi {
         prompt.append("  - 视觉优化：提供统一的高对比度配色方案，确保图表美观、直观。\\n");
         prompt.append("- **代码部分不得包含注释或多余说明**，仅输出完整、可用的配置对象。\\n\\n");
         prompt.append("```\\n");
-        prompt.append("option = {\\n");
+        prompt.append("{\\n");
         prompt.append("    // 图表代码\\n");
         prompt.append("};\\n");
         prompt.append("```\\n\\n");

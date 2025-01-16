@@ -2,6 +2,9 @@ package com.yupi.springbootinit.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.google.gson.Gson;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
 import com.yupi.springbootinit.annotation.AuthCheck;
 import com.yupi.springbootinit.api.DeepSeekApi;
 import com.yupi.springbootinit.common.BaseResponse;
@@ -18,6 +21,7 @@ import com.yupi.springbootinit.model.dto.file.UploadFileRequest;
 import com.yupi.springbootinit.model.entity.Chart;
 import com.yupi.springbootinit.model.entity.User;
 import com.yupi.springbootinit.model.enums.FileUploadBizEnum;
+import com.yupi.springbootinit.model.vo.BiResponse;
 import com.yupi.springbootinit.service.ChartService;
 import com.yupi.springbootinit.service.UserService;
 import javax.annotation.Resource;
@@ -255,8 +259,8 @@ public class ChartController {
      * @return
      */
     @PostMapping("/gen")
-    public BaseResponse<String> genChartByAi(@RequestPart("file") MultipartFile multipartFile,
-                                             GenChartByAiRequest genChartByAiRequest, HttpServletRequest request) throws FileNotFoundException {
+    public BaseResponse<BiResponse> genChartByAi(@RequestPart("file") MultipartFile multipartFile,
+                                                 GenChartByAiRequest genChartByAiRequest, HttpServletRequest request) throws FileNotFoundException {
         String goal = genChartByAiRequest.getGoal();
         String chartType = genChartByAiRequest.getChartType();
         String name = genChartByAiRequest.getName();
@@ -264,6 +268,8 @@ public class ChartController {
         // 校验
         ThrowUtils.throwIf(StringUtils.isBlank(goal), ErrorCode.PARAMS_ERROR, "目标为空");
         ThrowUtils.throwIf(StringUtils.isBlank(name) && name.length() > 100, ErrorCode.PARAMS_ERROR, "名称错误");
+        // 必须登录才允许使用
+        User loginUser = userService.getLoginUser(request);
 
         // 用户输入
         StringBuilder userInput = new StringBuilder();
@@ -272,15 +278,46 @@ public class ChartController {
         userInput.append("图表类型: ").append(chartType).append("\n");
 
         // 压缩后的输入
-        String result = ExcelUtils.excelToCsv(multipartFile);
-        userInput.append("数据: ").append(result).append("\n");
+        String csvData = ExcelUtils.excelToCsv(multipartFile);
+        userInput.append("数据: ").append(csvData).append("\n");
 
+        System.out.println(userInput);
         DeepSeekApi api = new DeepSeekApi();
 
+        String genChart = "";
+        String genResult = "";
         try {
             Response response = api.getContent(userInput);
             if (response.isSuccessful()) {
-                System.out.println("Response: " + response.body().string());
+                // 解析响应体
+                String responseBody = response.body().string();
+                System.out.println("Response: " + responseBody);
+
+                // 使用 Gson 解析 JSON
+                Gson gson = new Gson();
+                JsonObject jsonResponse = gson.fromJson(responseBody, JsonObject.class);
+
+                // 提取 choices 中的 message.content
+                JsonArray choices = jsonResponse.getAsJsonArray("choices");
+                if (choices != null && choices.size() > 0) {
+                    JsonObject firstChoice = choices.get(0).getAsJsonObject();
+                    JsonObject message = firstChoice.getAsJsonObject("message");
+                    String content = message.get("content").getAsString();
+
+                    // 提取图表代码部分
+                    int chartStart = content.indexOf("```json");
+                    int chartEnd = content.indexOf("```", chartStart + 1);
+                    if (chartStart != -1 && chartEnd != -1) {
+                        genChart = content.substring(chartStart + "```json".length(), chartEnd).trim();
+                    }
+
+                    // 提取图表描述与分析结论部分
+                    int resultStart = content.indexOf("```\n图表描述：");
+                    int resultEnd = content.indexOf("```", resultStart + 1);
+                    if (resultStart != -1 && resultEnd != -1) {
+                        genResult = content.substring(resultStart + "```\n".length(), resultEnd).trim();
+                    }
+                }
             } else {
                 System.err.println("Request failed with code: " + response.code());
                 System.err.println("Error message: " + response.body().string());
@@ -289,29 +326,27 @@ public class ChartController {
         } catch (IOException e) {
             e.printStackTrace();
         }
-        return ResultUtils.success(userInput.toString());
+//        // 输出结果
+//        System.out.println("genChart: " + genChart);
+//        System.out.println("genResult: " + genResult);
 
-//        // 读取用户上传的excel文件进行处理
-//        User loginUser = userService.getLoginUser(request);
-//        // 文件目录：根据业务、用户来划分
-//        String uuid = RandomStringUtils.randomAlphanumeric(8);
-//        String filename = uuid + "-" + multipartFile.getOriginalFilename();
-//
-//        File file = null;
-//        try {
-//            // 返回可访问地址
-//            return ResultUtils.success("");
-//        } catch (Exception e) {
-////            log.error("file upload error, filepath = " + filepath, e);
-//            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "上传失败");
-//        } finally {
-//            if (file != null) {
-//                // 删除临时文件
-//                boolean delete = file.delete();
-//                if (!delete) {
-//                    log.error("file delete error, filepath = {}", filepath);
-//                }
-//            }
-//        }
+        // 插入到数据库
+        Chart chart = new Chart();
+        chart.setGoal(goal);
+        chart.setChartData(csvData);
+        chart.setChartType(chartType);
+        chart.setName(name);
+        chart.setGenChart(genChart);
+        chart.setGenResult(genResult);
+        chart.setUserId(loginUser.getId());
+        boolean saveResult = ChartService.save(chart);
+        ThrowUtils.throwIf(!saveResult, ErrorCode.SYSTEM_ERROR, "图表保存失败");
+
+        // 封装到BiResponse里
+        BiResponse biResponse = new BiResponse();
+        biResponse.setGenChart(genChart);
+        biResponse.setGenResult(genResult);
+
+        return ResultUtils.success(biResponse);
     }
 }

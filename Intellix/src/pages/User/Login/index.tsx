@@ -93,7 +93,7 @@ const Login: React.FC = () => {
    */
   const fetchUserInfo = async () => {
     const userInfo = await getLoginUserUsingGet();
-    if (userInfo.code === 0) {
+    if (userInfo) {
       flushSync(() => {
         setInitialState((s) => ({
           ...s,
