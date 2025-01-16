@@ -1,7 +1,7 @@
 export default [
   { path: '/user', layout: false, routes: [{ path: '/user/login', component: './User/Login' }] },
   { path: '/', redirect: '/chart/add' },
-  { path: '/chart/add', icon: 'smile', component: './AddChart' },
+  { path: '/chart/add', name: '智能分析', icon: 'PieChartTwoTone', component: './AddChart' },
   {
     path: '/admin',
     icon: 'crown',
