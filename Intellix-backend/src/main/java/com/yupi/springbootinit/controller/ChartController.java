@@ -3,6 +3,7 @@ package com.yupi.springbootinit.controller;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.yupi.springbootinit.annotation.AuthCheck;
+import com.yupi.springbootinit.api.DeepSeekApi;
 import com.yupi.springbootinit.common.BaseResponse;
 import com.yupi.springbootinit.common.DeleteRequest;
 import com.yupi.springbootinit.common.ErrorCode;
@@ -25,6 +26,7 @@ import javax.servlet.http.HttpServletRequest;
 import com.yupi.springbootinit.utils.ExcelUtils;
 import com.yupi.springbootinit.utils.SqlUtils;
 import lombok.extern.slf4j.Slf4j;
+import okhttp3.Response;
 import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -34,6 +36,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
 import java.io.FileNotFoundException;
+import java.io.IOException;
 
 /**
  * 帖子接口
@@ -262,8 +265,31 @@ public class ChartController {
         ThrowUtils.throwIf(StringUtils.isBlank(goal), ErrorCode.PARAMS_ERROR, "目标为空");
         ThrowUtils.throwIf(StringUtils.isBlank(name) && name.length() > 100, ErrorCode.PARAMS_ERROR, "名称错误");
 
+        // 用户输入
+        StringBuilder userInput = new StringBuilder();
+
+        userInput.append("分析目标: ").append(goal).append("\n");
+        userInput.append("图表类型: ").append(chartType).append("\n");
+
+        // 压缩后的输入
         String result = ExcelUtils.excelToCsv(multipartFile);
-        return ResultUtils.success(result);
+        userInput.append("数据: ").append(result).append("\n");
+
+        DeepSeekApi api = new DeepSeekApi();
+
+        try {
+            Response response = api.getContent(userInput);
+            if (response.isSuccessful()) {
+                System.out.println("Response: " + response.body().string());
+            } else {
+                System.err.println("Request failed with code: " + response.code());
+                System.err.println("Error message: " + response.body().string());
+            }
+            response.close(); // 手动关闭 Response
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return ResultUtils.success(userInput.toString());
 
 //        // 读取用户上传的excel文件进行处理
 //        User loginUser = userService.getLoginUser(request);
