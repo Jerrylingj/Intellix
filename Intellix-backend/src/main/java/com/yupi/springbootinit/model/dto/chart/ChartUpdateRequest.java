@@ -40,6 +40,11 @@ public class ChartUpdateRequest implements Serializable {
     private String chartType;
 
     /**
+     * 图表名称
+     */
+    private String name;
+
+    /**
      * AI生成图表数据
      */
     private String genChart;

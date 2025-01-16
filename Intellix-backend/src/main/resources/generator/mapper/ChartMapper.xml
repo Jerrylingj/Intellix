@@ -9,15 +9,17 @@
             <result property="goal" column="goal" />
             <result property="chartData" column="chartData" />
             <result property="chartType" column="chartType" />
+            <result property="name" column="name" />
             <result property="genChart" column="genChart" />
             <result property="genResult" column="genResult" />
+            <result property="userId" column="userId" />
             <result property="createTime" column="createTime" />
             <result property="updateTime" column="updateTime" />
             <result property="isDelete" column="isDelete" />
     </resultMap>
 
     <sql id="Base_Column_List">
-        id,goal,chartData,chartType,genChart,genResult,
+        id,goal,chartData,chartType,`name`,genChart,genResult,
         createTime,updateTime,isDelete
     </sql>
 </mapper>
