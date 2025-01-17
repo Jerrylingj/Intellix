@@ -2,6 +2,7 @@ export default [
   { path: '/user', layout: false, routes: [{ path: '/user/login', component: './User/Login' }] },
   { path: '/', redirect: '/chart/add' },
   { path: '/chart/add', name: '智能分析', icon: 'PieChartTwoTone', component: './AddChart' },
+  { path: '/charts', name: '我的图表', icon: 'FundTwoTone', component: './Charts' },
   {
     path: '/admin',
     icon: 'crown',
