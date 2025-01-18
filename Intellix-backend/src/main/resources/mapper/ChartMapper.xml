@@ -22,4 +22,9 @@
         id,goal,chartData,chartType,`name`,genChart,genResult,
         createTime,updateTime,isDelete
     </sql>
+
+    <select id="queryChartData" parameterType="string" resultType="hashmap">
+        ${querySql}
+    </select>
+
 </mapper>

@@ -113,11 +113,10 @@ const Charts: React.FC = () => {
                       <div style={{ textAlign: 'center', padding: '24px' }}>
                         <Text type="warning">屏幕宽度过小，无法展示图像</Text>
                       </div>
-                    ) : (
-                      <ReactECharts
-                        option={JSON.parse(item.genChart ?? '{}')}
-                        style={{ height: '300px', width: '100%' }}
-                      />
+                    ) : ( item.genChart ?  (<ReactECharts
+                          option={JSON.parse(item.genChart ?? '{}')}
+                          style={{ height: '300px', width: '100%' }}
+                      />) : (<div style={{ textAlign: 'center', padding: '24px' }}><Text type="warning" style={{ fontSize: '30px', fontWeight: '10px'}}>图表数据丢失……</Text></div>)
                     )}
                   </div>
                 }

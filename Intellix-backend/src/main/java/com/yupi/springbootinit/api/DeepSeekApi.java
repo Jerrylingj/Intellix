@@ -86,7 +86,7 @@ public class DeepSeekApi {
                         "  ],\n" +
                         "  \"model\": \"deepseek-chat\",\n" +
                         "  \"frequency_penalty\": 0,\n" +
-                        "  \"max_tokens\": 2048,\n" +
+                        "  \"max_tokens\": 4096,\n" +
                         "  \"presence_penalty\": 0,\n" +
                         "  \"response_format\": {\n" +
                         "    \"type\": \"text\"\n" +
@@ -94,7 +94,7 @@ public class DeepSeekApi {
                         "  \"stop\": null,\n" +
                         "  \"stream\": false,\n" +
                         "  \"stream_options\": null,\n" +
-                        "  \"temperature\": 1,\n" +
+                        "  \"temperature\": 0.7,\n" +
                         "  \"top_p\": 1,\n" +
                         "  \"tools\": null,\n" +
                         "  \"tool_choice\": \"none\",\n" +
@@ -107,9 +107,9 @@ public class DeepSeekApi {
 
         // 创建 OkHttp 客户端
         OkHttpClient client = new OkHttpClient().newBuilder()
-                .connectTimeout(30, TimeUnit.SECONDS) // 连接超时时间
-                .readTimeout(30, TimeUnit.SECONDS)    // 读取超时时间
-                .writeTimeout(30, TimeUnit.SECONDS)   // 写入超时时间
+                .connectTimeout(60, TimeUnit.SECONDS) // 连接超时时间
+                .readTimeout(60, TimeUnit.SECONDS)    // 读取超时时间
+                .writeTimeout(60, TimeUnit.SECONDS)   // 写入超时时间
                 .build();
         MediaType mediaType = MediaType.parse("application/json");
         RequestBody body = RequestBody.create(requestBody, mediaType);
