@@ -14,7 +14,11 @@ import java.util.Map;
 */
 public interface ChartMapper extends BaseMapper<Chart> {
     List<Map<String, Object>> queryChartData(String querySql);
+
+//    void createChartData(String subTableSql);
+    void executeSql(String sql);
 }
+
 
 
 

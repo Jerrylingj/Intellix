@@ -23,6 +23,15 @@
         createTime,updateTime,isDelete
     </sql>
 
+    <!-- 创建分表 到分表 -->
+<!--    <update id="createChartData">-->
+<!--        ${subTableSql}-->
+<!--    </update>-->
+    <update id="executeSql">
+        ${sql}
+    </update>
+
+    <!-- 查询库表数据 -->
     <select id="queryChartData" parameterType="string" resultType="hashmap">
         ${querySql}
     </select>
