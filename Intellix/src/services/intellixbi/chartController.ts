@@ -133,6 +133,20 @@ export async function listMyChartByPageUsingPost(
   });
 }
 
+/** getChartStatus GET /api/chart/status/${param0} */
+export async function getChartStatusUsingGet(
+  // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
+  params: API.getChartStatusUsingGETParams,
+  options?: { [key: number]: any },
+) {
+  const { chartId: param0, ...queryParams } = params;
+  return request<API.BaseResponseBiResponse_>(`/api/chart/status/${param0}`, {
+    method: 'GET',
+    params: { ...queryParams },
+    ...(options || {}),
+  });
+}
+
 /** updateChart POST /api/chart/update */
 export async function updateChartUsingPost(
   body: API.ChartUpdateRequest,

@@ -7,6 +7,9 @@ import lombok.Data;
  */
 @Data
 public class BiResponse {
+    private Long id;
+    private String status;
     private String genChart;
     private String genResult;
+    private String execMessage;
 }

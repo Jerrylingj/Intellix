@@ -2,19 +2,45 @@ import {
   InboxOutlined,
 } from '@ant-design/icons';
 import { Button, Card, Form, Input, message, Select, Space, Upload, Row, Col } from 'antd';
-import React, { useState } from 'react';
-import { genChartByAiUsingPost } from "@/services/intellixbi/chartController";
+import React, { useState, useEffect } from 'react';
+import { genChartByAiUsingPost, getChartStatusUsingGet } from "@/services/intellixbi/chartController";
 import TextArea from "antd/es/input/TextArea";
 import ReactECharts from 'echarts-for-react';
 
-/**
- * 添加图表页面
- * @constructor
- */
 const AddChart: React.FC = () => {
-  const [chart, setChart] = useState<API.BiResponse>(); // 用于存储图表数据
+  const [chart, setChart] = useState<API.BiResponse>();                     // 用于存储图表数据
   const [option, setOption] = useState<any>();
-  const [submitting, setSubmmitting] = useState<boolean>(false);
+  const [submitting, setSubmmitting] = useState<boolean>(
+    localStorage.getItem('submitting') === 'true'
+  ); // 提交按钮的加载状态
+  const [chartStatus, setChartStatus] = useState<string>('');               // 图表状态
+  const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout>(); // 轮询定时器
+  const [form] = Form.useForm();                                           // 表单实例
+
+  // 从 localStorage 恢复状态
+  useEffect(() => {
+    const savedChart = localStorage.getItem('chart');
+    const savedOption = localStorage.getItem('option');
+    const savedChartStatus = localStorage.getItem('chartStatus');
+    const savedFormData = localStorage.getItem('formData');
+    const savedSubmitting = localStorage.getItem('submitting');
+
+    if (savedChart) setChart(JSON.parse(savedChart));
+    if (savedOption) setOption(JSON.parse(savedOption));
+    if (savedChartStatus) setChartStatus(savedChartStatus);
+    if (savedFormData) form.setFieldsValue(JSON.parse(savedFormData));
+    if (savedSubmitting) setSubmmitting(savedSubmitting === 'true');
+  }, [form]);
+
+  // 监听表单数据变化并保存到 localStorage
+  const onFormValuesChange = (changedValues: any, allValues: any) => {
+    localStorage.setItem('formData', JSON.stringify(allValues));
+  };
+
+  // 保存 submitting 状态到 localStorage
+  useEffect(() => {
+    localStorage.setItem('submitting', submitting.toString());
+  }, [submitting]);
 
   // 修改 normFile 函数，确保返回的是一个数组
   const normFile = (e: any) => {
@@ -23,6 +49,68 @@ const AddChart: React.FC = () => {
       return e;
     }
     return e?.fileList ? [e.fileList[0]] : []; // 确保返回的是一个数组
+  };
+
+  const startPolling = (chartId: number) => {
+    // 清除之前的轮询
+    if (pollingInterval) {
+      clearInterval(pollingInterval);
+    }
+
+    /**
+     * 轮询
+     */
+    const interval = setInterval(async () => {
+      try {
+        console.log("启动轮询");
+        const params = {
+          chartId: chartId,
+        };
+
+        const res = await getChartStatusUsingGet(params); // 查询任务状态
+        console.log("轮询结果：", res);
+        if (res?.data) {
+          const status = res.data.status ?? 'running';
+          setChartStatus(status); // 更新任务状态
+
+          if (status === 'succeed') {
+            // 任务成功，展示结果
+            clearInterval(interval);
+            const chartOption = JSON.parse(res.data.genChart ?? '{}');
+            setChart(res.data); // 更新图表数据
+            setOption(chartOption);
+            message.success('分析成功');
+            setSubmmitting(false);
+
+            // 保存状态到 localStorage
+            localStorage.setItem('chart', JSON.stringify(res.data));
+            localStorage.setItem('option', JSON.stringify(chartOption));
+            localStorage.setItem('chartStatus', status);
+          } else if (status === 'failed') {
+            // 任务失败，显示错误信息
+            clearInterval(interval);
+            message.error(res.data.execMessage || '任务执行失败');
+            setSubmmitting(false);
+
+            // 保存状态到 localStorage
+            localStorage.setItem('chartStatus', status);
+          }
+          // 如果状态是 running 或 wait，继续轮询
+        } else {
+          // 显示错误信息
+          clearInterval(interval);
+          message.error('轮询请求失败，请重试');
+          setSubmmitting(false);
+        }
+      } catch (error) {
+        // 显示错误信息
+        clearInterval(interval);
+        message.error('轮询请求失败，请重试');
+        setSubmmitting(false);
+      }
+    }, 1000); // 每秒轮询一次
+
+    setPollingInterval(interval); // 存储定时器
   };
 
   /**
@@ -55,24 +143,72 @@ const AddChart: React.FC = () => {
     try {
       const res = await genChartByAiUsingPost(params, {}, file);
       console.log('res', res);
-      console.log('res.data.genChart:', res.data?.genChart);
-      console.log('typeof res.data.genChart:', typeof res.data?.genChart);
       if (!res?.data) {
         message.error('分析失败');
       } else {
-        const chartOption = JSON.parse(res.data.genChart ?? '');
-        if (!chartOption) {
-          throw new Error('图表代码解析错误！');
-        } else {
-          setChart(res.data); // 更新图表数据
-          setOption(chartOption);
-          message.success('分析成功');
-        }
+        const chartId: number = res.data?.id ?? 0;
+        const chartStatus: string = res.data.status ?? '';
+        console.log("获得图表ID" + chartId);
+        console.log("类型" + typeof chartId);
+        setChartStatus(chartStatus);
+        startPolling(chartId); // 启动轮询
+        message.success('任务已提交,请等待');
+
+        // 保存状态到 localStorage
+        localStorage.setItem('chartStatus', chartStatus);
       }
     } catch (e: any) {
       message.error('分析失败，' + e.message);
     }
+  };
+
+  /**
+   * 动态更新图表结果部分
+   */
+  const renderChartContent = () => {
+    if (chartStatus === 'succeed' && option) {
+      return <ReactECharts option={option} style={{ height: '400px' }} />;
+    } else if (chartStatus === 'failed') {
+      return <div>任务失败，请重试</div>;
+    } else if (chartStatus === 'running') {
+      return <div>任务执行中，请稍候...</div>;
+    } else if (chartStatus === 'wait') {
+      return <div>任务已提交，请等待</div>;
+    } else {
+      return <div>请先提交图表数据</div>;
+    }
+  };
+
+  const renderResultContent = () => {
+    if (chartStatus === 'succeed' && chart?.genResult) {
+      return <div style={{ whiteSpace: 'pre-line' }}>{chart.genResult}</div>;
+    } else if (chartStatus === 'failed') {
+      return <div>任务失败，请重试</div>;
+    } else if (chartStatus === 'running') {
+      return <div>任务执行中，请稍候...</div>;
+    } else if (chartStatus === 'wait') {
+      return <div>任务已提交，请等待</div>;
+    } else {
+      return <div>请先提交图表数据</div>;
+    }
+  };
+
+  /**
+   * 重置状态
+   */
+  const resetState = () => {
+    setChart(undefined);
+    setOption(undefined);
+    setChartStatus('');
     setSubmmitting(false);
+    form.resetFields(); // 重置表单数据
+
+    // 清除 localStorage
+    localStorage.removeItem('chart');
+    localStorage.removeItem('option');
+    localStorage.removeItem('chartStatus');
+    localStorage.removeItem('formData');
+    localStorage.removeItem('submitting');
   };
 
   return (
@@ -82,10 +218,12 @@ const AddChart: React.FC = () => {
         <Col xs={24} md={12}>
           <Card title="添加图表" bordered={false} style={{ boxShadow: '0 4px 8px rgba(0, 0, 0, 0.1)' }}>
             <Form
+              form={form}
               name="add-chart"
               onFinish={onFinish}
               initialValues={{}}
               layout="vertical"
+              onValuesChange={onFormValuesChange}
             >
               <Form.Item
                 name="name"
@@ -159,7 +297,7 @@ const AddChart: React.FC = () => {
                   <Button type="primary" htmlType="submit" loading={submitting} disabled={submitting}>
                     提交
                   </Button>
-                  <Button htmlType="reset">清空</Button>
+                  <Button htmlType="reset" onClick={resetState}>清空</Button>
                 </Space>
               </Form.Item>
             </Form>
@@ -170,7 +308,7 @@ const AddChart: React.FC = () => {
         <Col xs={24} md={12}>
           <Card title="生成图表" bordered={false} style={{ boxShadow: '0 4px 8px rgba(0, 0, 0, 0.1)' }}>
             <div style={{ marginBottom: '24px' }}>
-              {option ? <ReactECharts option={option} style={{ height: '400px' }}/> : <div>请先提交图表数据</div>}
+              {renderChartContent()}
             </div>
           </Card>
 
@@ -179,7 +317,7 @@ const AddChart: React.FC = () => {
             bordered={false}
             style={{ marginTop: '24px', boxShadow: '0 4px 8px rgba(0, 0, 0, 0.1)' }}
           >
-            <div style={{ whiteSpace: 'pre-line' }}>{chart?.genResult ?? '请先提交图表数据'}</div>
+            {renderResultContent()}
           </Card>
         </Col>
       </Row>

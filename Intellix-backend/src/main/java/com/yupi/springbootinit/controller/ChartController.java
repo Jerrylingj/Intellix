@@ -12,6 +12,7 @@ import com.yupi.springbootinit.common.BaseResponse;
 import com.yupi.springbootinit.common.DeleteRequest;
 import com.yupi.springbootinit.common.ErrorCode;
 import com.yupi.springbootinit.common.ResultUtils;
+import com.yupi.springbootinit.config.ThreadPoolExecutorConfig;
 import com.yupi.springbootinit.constant.CommonConstant;
 import com.yupi.springbootinit.constant.FileConstant;
 import com.yupi.springbootinit.constant.UserConstant;
@@ -38,6 +39,7 @@ import okhttp3.Response;
 import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.tomcat.util.threads.ThreadPoolExecutor;
 import org.springframework.beans.BeanUtils;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -47,9 +49,10 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 /**
- * 帖子接口
+ * 图表接口
  *
  * @author <a href="https://github.com/liyupi">程序员鱼皮</a>
  * @from <a href="https://yupi.icu">编程导航知识星球</a>
@@ -70,6 +73,9 @@ public class ChartController {
 
     @Resource
     private SubTableManager subTableManager;
+
+    @Resource
+    private ThreadPoolExecutor threadPoolExecutor;
 
     // region 增删改查
 
@@ -263,6 +269,27 @@ public class ChartController {
     }
 
     /**
+     * 轮询图表状态
+     * @param chartId
+     * @return 当前图表信息
+     */
+    @GetMapping("/status/{chartId}")
+    public BaseResponse<BiResponse> getChartStatus(@PathVariable Long chartId) {
+        Chart chart = ChartService.getById(chartId);
+        if (chart == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "图表不存在");
+        }
+
+        BiResponse biResponse = new BiResponse();
+        biResponse.setId(chart.getId());
+        biResponse.setStatus(chart.getStatus());
+        biResponse.setGenChart(chart.getGenChart());
+        biResponse.setGenResult(chart.getGenResult());
+        biResponse.setExecMessage(chart.getExecMessage());
+        return ResultUtils.success(biResponse);
+    }
+
+    /**
      * 智能分析
      *
      * @param multipartFile
@@ -310,60 +337,13 @@ public class ChartController {
         System.out.println(userInput);
         DeepSeekApi api = new DeepSeekApi();
 
-        String genChart = "";
-        String genResult = "";
-        try {
-            Response response = api.getContent(userInput);
-            if (response.isSuccessful()) {
-                // 解析响应体
-                String responseBody = response.body().string();
-                System.out.println("Response: " + responseBody);
-
-                // 使用 Gson 解析 JSON
-                Gson gson = new Gson();
-                JsonObject jsonResponse = gson.fromJson(responseBody, JsonObject.class);
-
-                // 提取 choices 中的 message.content
-                JsonArray choices = jsonResponse.getAsJsonArray("choices");
-                if (choices != null && choices.size() > 0) {
-                    JsonObject firstChoice = choices.get(0).getAsJsonObject();
-                    JsonObject message = firstChoice.getAsJsonObject("message");
-                    String content = message.get("content").getAsString();
-
-                    // 提取图表代码部分
-                    int chartStart = content.indexOf("```json");
-                    int chartEnd = content.indexOf("```", chartStart + 1);
-                    if (chartStart != -1 && chartEnd != -1) {
-                        genChart = content.substring(chartStart + "```json".length(), chartEnd).trim();
-                    }
-
-                    // 提取图表描述与分析结论部分
-                    int resultStart = content.indexOf("```\n图表描述：");
-                    int resultEnd = content.indexOf("```", resultStart + 1);
-                    if (resultStart != -1 && resultEnd != -1) {
-                        genResult = content.substring(resultStart + "```\n".length(), resultEnd).trim();
-                    }
-                }
-            } else {
-                System.err.println("Request failed with code: " + response.code());
-                System.err.println("Error message: " + response.body().string());
-            }
-            response.close(); // 手动关闭 Response
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-//        // 输出结果
-//        System.out.println("genChart: " + genChart);
-//        System.out.println("genResult: " + genResult);
-
-        // 插入到数据库
+        // 提交任务
         Chart chart = new Chart();
         chart.setGoal(goal);
         chart.setChartData(csvData); // 动态分表，需要取消掉csvData的保存
         chart.setChartType(chartType);
+        chart.setStatus("wait");
         chart.setName(name);
-        chart.setGenChart(genChart);
-        chart.setGenResult(genResult);
         chart.setUserId(loginUser.getId());
         boolean saveResult = ChartService.save(chart);
         ThrowUtils.throwIf(!saveResult, ErrorCode.SYSTEM_ERROR, "图表保存失败");
@@ -371,13 +351,98 @@ public class ChartController {
         Long chartId = chart.getId(); // 获取插入后的图表 ID
         subTableManager.createChartData(chartId.toString(), csvData);
 
+        CompletableFuture.runAsync(() -> {
+            // 先修改状态为执行中
+            Chart updateChart = ChartService.getById(chartId);
+            updateChart.setStatus("running");
+            boolean b = ChartService.updateById(updateChart);
+            if (!b) {
+                handleChartUpdateError(chartId, "更新图表运行状态失败");
+                return;
+            }
+
+            // 调用 AI
+            String genChart = "";
+            String genResult = "";
+
+            try {
+                Response response = api.getContent(userInput);
+                if (response.isSuccessful()) {
+                    // 解析响应体
+                    String responseBody = response.body().string();
+                    System.out.println("Response: " + responseBody);
+
+                    // 使用 Gson 解析 JSON
+                    Gson gson = new Gson();
+                    JsonObject jsonResponse = gson.fromJson(responseBody, JsonObject.class);
+
+                    // 提取 choices 中的 message.content
+                    JsonArray choices = jsonResponse.getAsJsonArray("choices");
+                    if (choices != null && choices.size() > 0) {
+                        JsonObject firstChoice = choices.get(0).getAsJsonObject();
+                        JsonObject message = firstChoice.getAsJsonObject("message");
+                        String content = message.get("content").getAsString();
+
+                        // 提取图表代码部分
+                        int chartStart = content.indexOf("```json");
+                        int chartEnd = content.indexOf("```", chartStart + 1);
+                        if (chartStart != -1 && chartEnd != -1) {
+                            genChart = content.substring(chartStart + "```json".length(), chartEnd).trim();
+                        }
+
+                        // 提取图表描述与分析结论部分
+                        int resultStart = content.indexOf("```\n图表描述：");
+                        int resultEnd = content.indexOf("```", resultStart + 1);
+                        if (resultStart != -1 && resultEnd != -1) {
+                            genResult = content.substring(resultStart + "```\n".length(), resultEnd).trim();
+                        }
+                    }
+                } else {
+                    System.err.println("Request failed with code: " + response.code());
+                    System.err.println("Error message: " + response.body().string());
+                }
+                response.close(); // 手动关闭 Response
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+
+            Chart updateChartResult = ChartService.getById(chartId);
+            updateChartResult.setGenChart(genChart);
+            updateChartResult.setGenResult(genResult);
+            updateChartResult.setStatus("succeed");
+            boolean b1 = ChartService.updateById(updateChartResult);
+            if (!b1) {
+                handleChartUpdateError(chartId, "更新图表成功状态失败");
+                return;
+            }
+        }, threadPoolExecutor);
+
+
+
+//        // 输出结果
+//        System.out.println("genChart: " + genChart);
+//        System.out.println("genResult: " + genResult);
+
+
+
         // 封装到BiResponse里
         BiResponse biResponse = new BiResponse();
-        biResponse.setGenChart(genChart);
-        biResponse.setGenResult(genResult);
-
+        biResponse.setId(chart.getId());
+        biResponse.setStatus(chart.getStatus());
+        biResponse.setGenChart(chart.getGenChart());
+        biResponse.setGenResult(chart.getGenResult());
+        biResponse.setExecMessage(chart.getExecMessage());
         return ResultUtils.success(biResponse);
     }
 
+    private void handleChartUpdateError(long chartId, String execMessage) {
+        Chart updateChart = ChartService.getById(chartId);
+        updateChart.setStatus("failed");
+        updateChart.setExecMessage(execMessage);
+        boolean b = ChartService.updateById(updateChart);
+        if (!b) {
+            log.error("更新图表失败状态失败！" + chartId + " " + execMessage);
+        }
+    }
 
 }
