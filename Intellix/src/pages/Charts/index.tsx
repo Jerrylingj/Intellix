@@ -14,7 +14,7 @@ const { Title, Text } = Typography;
  */
 const Charts: React.FC = () => {
   const initSearchParams = {
-    pageSize: 4,
+    pageSize: 10,
     current: 1,
   };
 

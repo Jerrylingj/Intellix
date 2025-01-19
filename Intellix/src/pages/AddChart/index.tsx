@@ -1,7 +1,7 @@
 import {
   InboxOutlined,
 } from '@ant-design/icons';
-import { Button, Card, Form, Input, message, Select, Space, Upload, Row, Col } from 'antd';
+import {Button, Card, Form, Input, message, Select, Space, Upload, Row, Col, Modal} from 'antd';
 import React, { useState, useEffect } from 'react';
 import { genChartByAiUsingPost, getChartStatusUsingGet } from "@/services/intellixbi/chartController";
 import TextArea from "antd/es/input/TextArea";
@@ -197,18 +197,57 @@ const AddChart: React.FC = () => {
    * 重置状态
    */
   const resetState = () => {
-    setChart(undefined);
-    setOption(undefined);
-    setChartStatus('');
-    setSubmmitting(false);
-    form.resetFields(); // 重置表单数据
+    if (submitting) {
+      // 如果正在提交，弹出确认对话框
+      Modal.confirm({
+        title: '确定不等啦？',
+        content: '当前任务将在后台进行，进行下一个请求提交。',
+        okText: '确认',
+        cancelText: '取消',
+        onOk: () => {
+          // 清除轮询定时器
+          if (pollingInterval) {
+            clearInterval(pollingInterval);
+            setPollingInterval(undefined);
+          }
 
-    // 清除 localStorage
-    localStorage.removeItem('chart');
-    localStorage.removeItem('option');
-    localStorage.removeItem('chartStatus');
-    localStorage.removeItem('formData');
-    localStorage.removeItem('submitting');
+          // 重置状态
+          setChart(undefined);
+          setOption(undefined);
+          setChartStatus('');
+          setSubmmitting(false);
+          form.resetFields(); // 重置表单数据
+
+          // 清除 localStorage
+          localStorage.removeItem('chart');
+          localStorage.removeItem('option');
+          localStorage.removeItem('chartStatus');
+          localStorage.removeItem('formData');
+          localStorage.removeItem('submitting');
+
+          message.success('操作成功，可以提交新的请求');
+        },
+        onCancel: () => {
+          // 用户取消操作，不做任何处理
+        },
+      });
+    } else {
+      // 如果未在提交状态，直接重置表单
+      setChart(undefined);
+      setOption(undefined);
+      setChartStatus('');
+      setSubmmitting(false);
+      form.resetFields(); // 重置表单数据
+
+      // 清除 localStorage
+      localStorage.removeItem('chart');
+      localStorage.removeItem('option');
+      localStorage.removeItem('chartStatus');
+      localStorage.removeItem('formData');
+      localStorage.removeItem('submitting');
+
+      message.success('已重置表单');
+    }
   };
 
   return (
@@ -295,9 +334,9 @@ const AddChart: React.FC = () => {
               <Form.Item>
                 <Space>
                   <Button type="primary" htmlType="submit" loading={submitting} disabled={submitting}>
-                    提交
+                    提交请求
                   </Button>
-                  <Button htmlType="reset" onClick={resetState}>清空</Button>
+                  <Button htmlType="button" onClick={resetState}>{submitting ? '继续生成' : '重置表单'}</Button>
                 </Space>
               </Form.Item>
             </Form>
