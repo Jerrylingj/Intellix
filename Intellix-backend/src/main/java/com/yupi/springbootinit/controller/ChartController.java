@@ -19,6 +19,7 @@ import com.yupi.springbootinit.exception.BusinessException;
 import com.yupi.springbootinit.exception.ThrowUtils;
 import com.yupi.springbootinit.manager.RedisLimiterManager;
 import com.yupi.springbootinit.manager.SubTableManager;
+import com.yupi.springbootinit.mapper.ChartMapper;
 import com.yupi.springbootinit.model.dto.chart.*;
 import com.yupi.springbootinit.model.dto.file.UploadFileRequest;
 import com.yupi.springbootinit.model.entity.Chart;
@@ -366,14 +367,10 @@ public class ChartController {
         chart.setUserId(loginUser.getId());
         boolean saveResult = ChartService.save(chart);
         ThrowUtils.throwIf(!saveResult, ErrorCode.SYSTEM_ERROR, "图表保存失败");
-//        // 动态分表
-//        Long chartId = chart.getId(); // 获取插入后的图表 ID
-//        boolean success = subTableManager.dosubTable(chartId, csvData);
-//        if (success) {
-//            return ResultUtils.success("数据插入成功");
-//        } else {
-//            return ResultUtils.error(ErrorCode.SYSTEM_ERROR, "数据插入失败");
-//        }
+        // 动态分表
+        Long chartId = chart.getId(); // 获取插入后的图表 ID
+        subTableManager.createChartData(chartId.toString(), csvData);
+
         // 封装到BiResponse里
         BiResponse biResponse = new BiResponse();
         biResponse.setGenChart(genChart);
@@ -381,4 +378,6 @@ public class ChartController {
 
         return ResultUtils.success(biResponse);
     }
+
+
 }
